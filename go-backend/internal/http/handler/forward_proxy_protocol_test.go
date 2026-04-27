@@ -25,7 +25,7 @@ func TestBuildForwardServiceConfigsSendsProxyProtocolToForwardHandler(t *testing
 		UDPListenAddr: "0.0.0.0",
 	}
 
-	services := buildForwardServiceConfigs("1_2_3", forward, tunnel, node, 4001, "", nil, "")
+	services := buildForwardServiceConfigs("1_2_3", forward, tunnel, node, 4001, "", forwardRuntimeLimiters{})
 	if len(services) != 2 {
 		t.Fatalf("expected 2 services, got %d", len(services))
 	}

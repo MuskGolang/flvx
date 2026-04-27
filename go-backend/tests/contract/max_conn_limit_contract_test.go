@@ -97,6 +97,7 @@ func TestMaxConnLimit(t *testing.T) {
 		"remoteAddr":    "1.1.1.1:443",
 		"strategy":      "fifo",
 		"maxConn":       42,
+		"ipMaxConn":     7,
 		"proxyProtocol": 2,
 	}
 	body, err := json.Marshal(payload)
@@ -195,8 +196,8 @@ func TestMaxConnLimit(t *testing.T) {
 		t.Fatalf("expected limiter name %s, got %v", expectedName, addData["name"])
 	}
 	if limits, ok := addData["limits"].([]interface{}); ok {
-		if len(limits) != 1 || limits[0] != "$ 42" {
-			t.Fatalf("expected limits to contain '$ 42', got %v", limits)
+		if len(limits) != 2 || limits[0] != "$ 42" || limits[1] != "$$ 7" {
+			t.Fatalf("expected limits to contain '$ 42' and '$$ 7', got %v", limits)
 		}
 	} else {
 		t.Fatalf("invalid limits type in AddCLimiters data: %v", addData)
@@ -218,8 +219,8 @@ func TestMaxConnLimit(t *testing.T) {
 		t.Fatalf("expected nested name %s, got %v", expectedName, nestedData["name"])
 	}
 	if nestedLimits, ok := nestedData["limits"].([]interface{}); ok {
-		if len(nestedLimits) != 1 || nestedLimits[0] != "$ 42" {
-			t.Fatalf("expected nested limits to contain '$ 42', got %v", nestedLimits)
+		if len(nestedLimits) != 2 || nestedLimits[0] != "$ 42" || nestedLimits[1] != "$$ 7" {
+			t.Fatalf("expected nested limits to contain '$ 42' and '$$ 7', got %v", nestedLimits)
 		}
 	} else {
 		t.Fatalf("invalid limits type in UpdateCLimiters nested data: %v", nestedData)

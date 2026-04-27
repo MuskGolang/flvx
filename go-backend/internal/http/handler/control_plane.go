@@ -292,27 +292,13 @@ func (h *Handler) syncForwardServicesWithWarnings(forward *forwardRecord, method
 	if user != nil && user.MaxConn > 0 {
 		userMaxConn = user.MaxConn
 	}
-	connLimiterConfig := buildConnLimiterConfig(forward, userMaxConn)
+	connLimiterConfigs := buildConnLimiterConfigs(forward, userMaxConn)
 
 	for _, fp := range ports {
-		runtimeLimiters := forwardRuntimeLimiters{ConnLimiter: connLimiterConfig.Name}
-		if ipSpeed != nil {
-			runtimeLimiters.TrafficLimiter = fmt.Sprintf("rule_traffic_limit_%d", forward.ID)
-			if err := h.ensureTrafficLimiterOnNode(fp.NodeID, runtimeLimiters.TrafficLimiter, speed, ipSpeed); err != nil {
-				// If the limiter push fails because the node is offline, skip it with a warning
-				if isNodeOfflineOrTimeoutError(err) {
-					node, _ := h.getNodeRecord(fp.NodeID)
-					nodeName := fmt.Sprintf("%d", fp.NodeID)
-					if node != nil && strings.TrimSpace(node.Name) != "" {
-						nodeName = strings.TrimSpace(node.Name)
-					}
-					warnings = append(warnings, fmt.Sprintf("节点 %s 不在线，已跳过下发", nodeName))
-					continue
-				}
-				return nil, err
-			}
-		} else if limiterID != nil && speed != nil {
-			runtimeLimiters.TrafficLimiter = strconv.FormatInt(*limiterID, 10)
+		runtimeLimiters := forwardRuntimeLimiters{ConnLimiter: joinLimiterNames(connLimiterConfigs)}
+		trafficLimiterNames := make([]string, 0, 2)
+		if limiterID != nil && speed != nil {
+			totalLimiterName := strconv.FormatInt(*limiterID, 10)
 			if err := h.ensureLimiterOnNode(fp.NodeID, *limiterID, *speed); err != nil {
 				// If the limiter push fails because the node is offline, skip it with a warning
 				if isNodeOfflineOrTimeoutError(err) {
@@ -326,9 +312,28 @@ func (h *Handler) syncForwardServicesWithWarnings(forward *forwardRecord, method
 				}
 				return nil, err
 			}
+			trafficLimiterNames = append(trafficLimiterNames, totalLimiterName)
 		}
+		if ipSpeed != nil {
+			ruleLimiterName := fmt.Sprintf("rule_traffic_limit_%d", forward.ID)
+			if err := h.ensureTrafficLimiterOnNode(fp.NodeID, ruleLimiterName, nil, ipSpeed); err != nil {
+				// If the limiter push fails because the node is offline, skip it with a warning
+				if isNodeOfflineOrTimeoutError(err) {
+					node, _ := h.getNodeRecord(fp.NodeID)
+					nodeName := fmt.Sprintf("%d", fp.NodeID)
+					if node != nil && strings.TrimSpace(node.Name) != "" {
+						nodeName = strings.TrimSpace(node.Name)
+					}
+					warnings = append(warnings, fmt.Sprintf("节点 %s 不在线，已跳过下发", nodeName))
+					continue
+				}
+				return nil, err
+			}
+			trafficLimiterNames = append(trafficLimiterNames, ruleLimiterName)
+		}
+		runtimeLimiters.TrafficLimiter = strings.Join(trafficLimiterNames, ",")
 
-		if connLimiterConfig.Name != "" {
+		for _, connLimiterConfig := range connLimiterConfigs {
 			if err := h.ensureConnLimiterOnNode(fp.NodeID, connLimiterConfig); err != nil {
 				warnings = append(warnings, fmt.Sprintf("节点 %d 连接限制器下发失败: %v", fp.NodeID, err))
 			}
@@ -1876,27 +1881,35 @@ func (h *Handler) ensureConnLimiterOnNode(nodeID int64, cfg forwardLimiterConfig
 	return nil
 }
 
-func buildConnLimiterConfig(forward *forwardRecord, userMaxConn int) forwardLimiterConfig {
+func buildConnLimiterConfigs(forward *forwardRecord, userMaxConn int) []forwardLimiterConfig {
 	if forward == nil {
-		return forwardLimiterConfig{}
+		return nil
 	}
-	limits := make([]string, 0, 2)
 	if forward.MaxConn > 0 {
-		limits = append(limits, fmt.Sprintf("$ %d", forward.MaxConn))
-	} else if userMaxConn > 0 {
-		limits = append(limits, fmt.Sprintf("$ %d", userMaxConn))
+		limits := []string{fmt.Sprintf("$ %d", forward.MaxConn)}
+		if forward.IPMaxConn > 0 {
+			limits = append(limits, fmt.Sprintf("$$ %d", forward.IPMaxConn))
+		}
+		return []forwardLimiterConfig{{Name: fmt.Sprintf("rule_conn_limit_%d", forward.ID), Limits: limits}}
+	}
+	configs := make([]forwardLimiterConfig, 0, 2)
+	if userMaxConn > 0 {
+		configs = append(configs, forwardLimiterConfig{Name: fmt.Sprintf("user_conn_limit_%d", forward.UserID), Limits: []string{fmt.Sprintf("$ %d", userMaxConn)}})
 	}
 	if forward.IPMaxConn > 0 {
-		limits = append(limits, fmt.Sprintf("$$ %d", forward.IPMaxConn))
+		configs = append(configs, forwardLimiterConfig{Name: fmt.Sprintf("rule_conn_limit_%d", forward.ID), Limits: []string{fmt.Sprintf("$$ %d", forward.IPMaxConn)}})
 	}
-	if len(limits) == 0 {
-		return forwardLimiterConfig{}
+	return configs
+}
+
+func joinLimiterNames(configs []forwardLimiterConfig) string {
+	names := make([]string, 0, len(configs))
+	for _, cfg := range configs {
+		if cfg.Name != "" {
+			names = append(names, cfg.Name)
+		}
 	}
-	name := fmt.Sprintf("user_conn_limit_%d", forward.UserID)
-	if forward.MaxConn > 0 || forward.IPMaxConn > 0 {
-		name = fmt.Sprintf("rule_conn_limit_%d", forward.ID)
-	}
-	return forwardLimiterConfig{Name: name, Limits: limits}
+	return strings.Join(names, ",")
 }
 
 func speedToLimitLine(key string, speed int) string {

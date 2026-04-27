@@ -73,7 +73,7 @@ func TestPerIPSpeedLimitRuntimePayload(t *testing.T) {
 
 	var commandMu sync.Mutex
 	receivedCommands := make([]string, 0)
-	var addLimitersData json.RawMessage
+	addLimitersData := make([]json.RawMessage, 0)
 	var updateServiceData json.RawMessage
 
 	stopNode := startMockSessionForMaxConn(t, server.URL, "per-ip-speed-secret", func(cmdType string, data json.RawMessage) (bool, string) {
@@ -81,7 +81,7 @@ func TestPerIPSpeedLimitRuntimePayload(t *testing.T) {
 		defer commandMu.Unlock()
 		receivedCommands = append(receivedCommands, cmdType)
 		if cmdType == "AddLimiters" {
-			addLimitersData = append([]byte(nil), data...)
+			addLimitersData = append(addLimitersData, append([]byte(nil), data...))
 		}
 		if cmdType == "UpdateService" {
 			updateServiceData = append([]byte(nil), data...)
@@ -123,34 +123,41 @@ func TestPerIPSpeedLimitRuntimePayload(t *testing.T) {
 		t.Fatalf("get forward ID: %v", err)
 	}
 	expectedName := fmt.Sprintf("rule_traffic_limit_%d", forwardID)
-	expectedLimits := []string{"$ 10.0MB 10.0MB", "0.0.0.0/0 5.0MB 5.0MB", "::/0 5.0MB 5.0MB"}
+	expectedTotalName := fmt.Sprint(totalSpeedID)
+	expectedRuleLimits := []string{"0.0.0.0/0 5.0MB 5.0MB", "::/0 5.0MB 5.0MB"}
+	expectedTotalLimits := []string{"$ 10.0MB 10.0MB"}
 
 	commandMu.Lock()
 	defer commandMu.Unlock()
-	if addLimitersData == nil {
+	if len(addLimitersData) != 2 {
 		t.Fatalf("expected AddLimiters to be sent. Received: %v", receivedCommands)
 	}
 	if updateServiceData == nil {
 		t.Fatalf("expected UpdateService to be sent. Received: %v", receivedCommands)
 	}
 
-	var addData map[string]interface{}
-	if err := json.Unmarshal(addLimitersData, &addData); err != nil {
-		t.Fatalf("unmarshal AddLimiters data: %v", err)
+	gotLimiterLimits := make(map[string][]string)
+	for _, raw := range addLimitersData {
+		var addData map[string]interface{}
+		if err := json.Unmarshal(raw, &addData); err != nil {
+			t.Fatalf("unmarshal AddLimiters data: %v", err)
+		}
+		name := fmt.Sprint(addData["name"])
+		limits, ok := addData["limits"].([]interface{})
+		if !ok {
+			t.Fatalf("expected limits array, got %T", addData["limits"])
+		}
+		gotLimits := make([]string, 0, len(limits))
+		for _, limit := range limits {
+			gotLimits = append(gotLimits, fmt.Sprint(limit))
+		}
+		gotLimiterLimits[name] = gotLimits
 	}
-	if addData["name"] != expectedName {
-		t.Fatalf("expected limiter name %s, got %v", expectedName, addData["name"])
+	if !reflect.DeepEqual(gotLimiterLimits[expectedTotalName], expectedTotalLimits) {
+		t.Fatalf("expected total limits %v, got %v", expectedTotalLimits, gotLimiterLimits[expectedTotalName])
 	}
-	limits, ok := addData["limits"].([]interface{})
-	if !ok {
-		t.Fatalf("expected limits array, got %T", addData["limits"])
-	}
-	gotLimits := make([]string, 0, len(limits))
-	for _, limit := range limits {
-		gotLimits = append(gotLimits, fmt.Sprint(limit))
-	}
-	if !reflect.DeepEqual(gotLimits, expectedLimits) {
-		t.Fatalf("expected limits %v, got %v", expectedLimits, gotLimits)
+	if !reflect.DeepEqual(gotLimiterLimits[expectedName], expectedRuleLimits) {
+		t.Fatalf("expected rule limits %v, got %v", expectedRuleLimits, gotLimiterLimits[expectedName])
 	}
 
 	var services []map[string]interface{}
@@ -161,8 +168,9 @@ func TestPerIPSpeedLimitRuntimePayload(t *testing.T) {
 		t.Fatalf("expected services in UpdateService")
 	}
 	for _, service := range services {
-		if service["limiter"] != expectedName {
-			t.Fatalf("expected service limiter %s, got %v", expectedName, service["limiter"])
+		expectedLimiter := expectedTotalName + "," + expectedName
+		if service["limiter"] != expectedLimiter {
+			t.Fatalf("expected service limiter %s, got %v", expectedLimiter, service["limiter"])
 		}
 	}
 }

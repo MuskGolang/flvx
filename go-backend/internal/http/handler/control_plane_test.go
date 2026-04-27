@@ -479,24 +479,30 @@ func TestBuildForwardServiceConfigs_IPv6BindIP(t *testing.T) {
 }
 
 func TestBuildConnLimiterConfigCombinesTotalAndPerIP(t *testing.T) {
-	cfg := buildConnLimiterConfig(&forwardRecord{ID: 42, UserID: 9, MaxConn: 100, IPMaxConn: 5}, 37)
-	want := forwardLimiterConfig{Name: "rule_conn_limit_42", Limits: []string{"$ 100", "$$ 5"}}
-	if !reflect.DeepEqual(cfg, want) {
-		t.Fatalf("expected %+v, got %+v", want, cfg)
+	cfgs := buildConnLimiterConfigs(&forwardRecord{ID: 42, UserID: 9, MaxConn: 100, IPMaxConn: 5}, 37)
+	want := []forwardLimiterConfig{{Name: "rule_conn_limit_42", Limits: []string{"$ 100", "$$ 5"}}}
+	if !reflect.DeepEqual(cfgs, want) {
+		t.Fatalf("expected %+v, got %+v", want, cfgs)
 	}
 }
 
 func TestBuildConnLimiterConfigUsesUserTotalWithRulePerIP(t *testing.T) {
-	cfg := buildConnLimiterConfig(&forwardRecord{ID: 42, UserID: 9, IPMaxConn: 5}, 37)
-	want := forwardLimiterConfig{Name: "rule_conn_limit_42", Limits: []string{"$ 37", "$$ 5"}}
-	if !reflect.DeepEqual(cfg, want) {
-		t.Fatalf("expected %+v, got %+v", want, cfg)
+	cfgs := buildConnLimiterConfigs(&forwardRecord{ID: 42, UserID: 9, IPMaxConn: 5}, 37)
+	want := []forwardLimiterConfig{
+		{Name: "user_conn_limit_9", Limits: []string{"$ 37"}},
+		{Name: "rule_conn_limit_42", Limits: []string{"$$ 5"}},
+	}
+	if !reflect.DeepEqual(cfgs, want) {
+		t.Fatalf("expected %+v, got %+v", want, cfgs)
+	}
+	if got := joinLimiterNames(cfgs); got != "user_conn_limit_9,rule_conn_limit_42" {
+		t.Fatalf("expected composite limiter names, got %q", got)
 	}
 }
 
-func TestBuildTrafficLimiterPayloadCombinesTotalAndPerIP(t *testing.T) {
-	payload := buildTrafficLimiterPayload("rule_traffic_limit_42", intPtr(80), intPtr(40))
-	wantLimits := []string{"$ 10.0MB 10.0MB", "0.0.0.0/0 5.0MB 5.0MB", "::/0 5.0MB 5.0MB"}
+func TestBuildTrafficLimiterPayloadUsesOnlyPerIPRulesWhenTotalIsSeparate(t *testing.T) {
+	payload := buildTrafficLimiterPayload("rule_traffic_limit_42", nil, intPtr(40))
+	wantLimits := []string{"0.0.0.0/0 5.0MB 5.0MB", "::/0 5.0MB 5.0MB"}
 	if payload["name"] != "rule_traffic_limit_42" {
 		t.Fatalf("expected name rule_traffic_limit_42, got %v", payload["name"])
 	}

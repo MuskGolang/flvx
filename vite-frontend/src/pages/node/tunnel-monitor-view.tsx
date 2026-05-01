@@ -1170,6 +1170,7 @@ export function TunnelMonitorView({
           {tunnels.map((tunnel) => {
             const quality = qualityMap[tunnel.id];
             const isEnabled = tunnel.status === 1;
+            const targetLabel = probeTargetLabel(quality);
 
             return (
               <Card
@@ -1223,12 +1224,15 @@ export function TunnelMonitorView({
                       />
                     </div>
                     <div className="space-y-1">
-                      <div
-                        className="text-[10px] text-default-500 flex items-center gap-1"
-                        title={probeTargetLabel(quality)}
-                      >
+                      <div className="text-[10px] text-default-500 flex items-center gap-1">
                         <Globe className="w-3 h-3" />
                         出口→测试目标
+                      </div>
+                      <div
+                        aria-label={`测试目标 ${targetLabel}`}
+                        className="text-[10px] text-default-400 truncate"
+                      >
+                        {targetLabel}
                       </div>
                       <UptimeHistoryBar
                         history={qualityHistoryMap[tunnel.id]}
@@ -1291,6 +1295,7 @@ export function TunnelMonitorView({
               {tunnels.map((tunnel) => {
                 const quality = qualityMap[tunnel.id];
                 const isEnabled = tunnel.status === 1;
+                const targetLabel = probeTargetLabel(quality);
 
                 return (
                   <TableRow
@@ -1319,12 +1324,20 @@ export function TunnelMonitorView({
                         type="entryToExit"
                       />
                     </TableCell>
-                    <TableCell title={probeTargetLabel(quality)}>
-                      <UptimeHistoryBar
-                        history={qualityHistoryMap[tunnel.id]}
-                        latestValue={quality?.exitToBingLatency}
-                        type="exitToBing"
-                      />
+                    <TableCell>
+                      <div
+                        aria-label={`出口到测试目标 ${targetLabel}`}
+                        className="space-y-1"
+                      >
+                        <UptimeHistoryBar
+                          history={qualityHistoryMap[tunnel.id]}
+                          latestValue={quality?.exitToBingLatency}
+                          type="exitToBing"
+                        />
+                        <span className="block max-w-[160px] truncate text-[10px] text-default-400">
+                          {targetLabel}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell>
                       {quality?.timestamp ? (

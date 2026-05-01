@@ -72,6 +72,39 @@ func TestNormalizeTunnelProbeTargetRejectsSchemePrefixButAllowsIPv6(t *testing.T
 	}
 }
 
+func TestNormalizeTunnelProbeTargetValidatesHostShape(t *testing.T) {
+	validHosts := []string{
+		"example.com",
+		"localhost",
+		"api-1.example.co.uk",
+		"192.0.2.10",
+		"2001:db8::1",
+		"[2001:db8::1]",
+	}
+	for _, host := range validHosts {
+		if _, _, err := normalizeTunnelProbeTarget(host, 443); err != nil {
+			t.Fatalf("expected valid host %q: %v", host, err)
+		}
+	}
+
+	invalidHosts := []string{
+		"1:2:3",
+		"[2001:db8::1",
+		"2001:db8::1]",
+		"[example.com]",
+		"example..com",
+		"-example.com",
+		"example-.com",
+		"exa_mple.com",
+		"999.1.1.1",
+	}
+	for _, host := range invalidHosts {
+		if _, _, err := normalizeTunnelProbeTarget(host, 443); err == nil {
+			t.Fatalf("expected invalid host %q to be rejected", host)
+		}
+	}
+}
+
 func TestParseTunnelProbeTargetFromRequest(t *testing.T) {
 	req := map[string]interface{}{
 		"probeTargetHost": "speed.example.com",

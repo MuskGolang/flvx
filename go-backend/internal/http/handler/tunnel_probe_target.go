@@ -25,10 +25,6 @@ func defaultTunnelProbeTarget() tunnelProbeTarget {
 
 func normalizeTunnelProbeTarget(host string, port int) (tunnelProbeTarget, bool, error) {
 	host = strings.TrimSpace(host)
-	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
-		host = strings.TrimPrefix(strings.TrimSuffix(host, "]"), "[")
-	}
-
 	if host == "" && port == 0 {
 		return defaultTunnelProbeTarget(), false, nil
 	}
@@ -38,11 +34,70 @@ func normalizeTunnelProbeTarget(host string, port int) (tunnelProbeTarget, bool,
 	if port <= 0 || port > 65535 {
 		return tunnelProbeTarget{}, false, errors.New("测试目标端口必须是 1-65535")
 	}
-	if strings.Contains(host, "://") || isTunnelProbeTargetSchemeLikeHost(host) || strings.ContainsAny(host, "/?#") || strings.ContainsAny(host, " \t\r\n") {
+	if strings.Contains(host, "://") || strings.ContainsAny(host, "/?#") || strings.ContainsAny(host, " \t\r\n") || isTunnelProbeTargetSchemeLikeHost(host) {
 		return tunnelProbeTarget{}, false, errors.New("测试目标 Host 不能包含协议或路径")
+	}
+	if normalized, ok := normalizeTunnelProbeTargetHost(host); ok {
+		host = normalized
+	} else {
+		return tunnelProbeTarget{}, false, errors.New("测试目标 Host 格式无效")
 	}
 
 	return tunnelProbeTarget{Host: host, Port: port}, true, nil
+}
+
+func normalizeTunnelProbeTargetHost(host string) (string, bool) {
+	if strings.HasPrefix(host, "[") || strings.HasSuffix(host, "]") {
+		if !strings.HasPrefix(host, "[") || !strings.HasSuffix(host, "]") {
+			return "", false
+		}
+		inner := strings.TrimPrefix(strings.TrimSuffix(host, "]"), "[")
+		addr, err := netip.ParseAddr(inner)
+		if err != nil || !addr.Is6() {
+			return "", false
+		}
+		return inner, true
+	}
+
+	if addr, err := netip.ParseAddr(host); err == nil {
+		return addr.String(), true
+	}
+	if strings.Contains(host, ":") || isTunnelProbeTargetIPv4Like(host) {
+		return "", false
+	}
+	if !isValidTunnelProbeTargetHost(host) {
+		return "", false
+	}
+	return host, true
+}
+
+func isValidTunnelProbeTargetHost(host string) bool {
+	if host == "" || len(host) > 253 {
+		return false
+	}
+	for _, label := range strings.Split(host, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, r := range label {
+			if !isASCIILetter(r) && !isASCIIDigit(r) && r != '-' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func isTunnelProbeTargetIPv4Like(host string) bool {
+	if host == "" {
+		return false
+	}
+	for _, r := range host {
+		if !isASCIIDigit(r) && r != '.' {
+			return false
+		}
+	}
+	return strings.Contains(host, ".")
 }
 
 func isTunnelProbeTargetSchemeLikeHost(host string) bool {

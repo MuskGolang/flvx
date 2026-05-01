@@ -525,6 +525,8 @@ export interface TunnelQualityApiItem {
   exitToBingLatency: number;
   entryToExitLoss: number;
   exitToBingLoss: number;
+  probeTargetHost?: string;
+  probeTargetPort?: number;
   success: boolean;
   errorMessage?: string;
   timestamp: number;

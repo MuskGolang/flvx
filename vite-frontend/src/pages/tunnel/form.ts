@@ -8,6 +8,8 @@ interface TunnelFormInput {
   inNodeId: TunnelChainNode[];
   outNodeId?: TunnelChainNode[];
   trafficRatio: number;
+  probeTargetHost?: string;
+  probeTargetPort?: number;
 }
 
 interface TunnelNodeInput {
@@ -26,6 +28,8 @@ export const createTunnelFormDefaults = () => {
     trafficRatio: 1.0,
     inIp: "",
     ipPreference: "",
+    probeTargetHost: "",
+    probeTargetPort: 0,
     status: 1,
   };
 };
@@ -61,6 +65,21 @@ export const validateTunnelForm = (
 
   if (form.trafficRatio <= 0 || form.trafficRatio > 100.0) {
     errors.trafficRatio = "流量倍率须大于0，支持小数（如 0.5）";
+  }
+
+  const probeHost = (form.probeTargetHost || "").trim();
+  const probePort = Number(form.probeTargetPort || 0);
+
+  if (probeHost || probePort > 0) {
+    if (!probeHost) {
+      errors.probeTargetHost = "请输入测试目标 Host";
+    } else if (probeHost.includes("://") || /[\s/?#]/.test(probeHost)) {
+      errors.probeTargetHost = "Host 不能包含协议、空格或路径";
+    }
+
+    if (!Number.isInteger(probePort) || probePort < 1 || probePort > 65535) {
+      errors.probeTargetPort = "端口必须是 1-65535";
+    }
   }
 
   if (form.type === 2) {

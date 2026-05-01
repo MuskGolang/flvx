@@ -884,16 +884,7 @@ func (h *Handler) tunnelUpdate(w http.ResponseWriter, r *http.Request) {
 		response.WriteJSON(w, response.ErrDefault("隧道ID不能为空"))
 		return
 	}
-	oldEntryNodeIDs, _ := h.tunnelEntryNodeIDs(id)
 	typeVal := asInt(req["type"], 1)
-	oldTunnel, _ := h.getTunnelRecord(id)
-	oldChainRows, _ := h.listChainNodesForTunnel(id)
-	if oldTunnel != nil && oldTunnel.Type == 2 && typeVal != 2 {
-		h.cleanupTunnelRuntime(id)
-	}
-	h.cleanupFederationRuntime(id)
-
-	now := time.Now().UnixMilli()
 	ipPreference := asString(req["ipPreference"])
 	probeTarget, probeTargetConfigured, err := parseTunnelProbeTargetFromRequest(req)
 	if err != nil {
@@ -906,6 +897,15 @@ func (h *Handler) tunnelUpdate(w http.ResponseWriter, r *http.Request) {
 		probeTargetHost = probeTarget.Host
 		probeTargetPort = probeTarget.Port
 	}
+	oldEntryNodeIDs, _ := h.tunnelEntryNodeIDs(id)
+	oldTunnel, _ := h.getTunnelRecord(id)
+	oldChainRows, _ := h.listChainNodesForTunnel(id)
+	if oldTunnel != nil && oldTunnel.Type == 2 && typeVal != 2 {
+		h.cleanupTunnelRuntime(id)
+	}
+	h.cleanupFederationRuntime(id)
+
+	now := time.Now().UnixMilli()
 	localDomain := h.federationLocalDomain()
 
 	runtimeState, err := h.prepareTunnelCreateState(h.repo.DB(), req, typeVal, id)

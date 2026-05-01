@@ -38,11 +38,42 @@ func normalizeTunnelProbeTarget(host string, port int) (tunnelProbeTarget, bool,
 	if port <= 0 || port > 65535 {
 		return tunnelProbeTarget{}, false, errors.New("测试目标端口必须是 1-65535")
 	}
-	if strings.Contains(host, "://") || strings.ContainsAny(host, "/?#") || strings.ContainsAny(host, " \t\r\n") {
+	if strings.Contains(host, "://") || isTunnelProbeTargetSchemeLikeHost(host) || strings.ContainsAny(host, "/?#") || strings.ContainsAny(host, " \t\r\n") {
 		return tunnelProbeTarget{}, false, errors.New("测试目标 Host 不能包含协议或路径")
 	}
 
 	return tunnelProbeTarget{Host: host, Port: port}, true, nil
+}
+
+func isTunnelProbeTargetSchemeLikeHost(host string) bool {
+	if _, err := netip.ParseAddr(host); err == nil {
+		return false
+	}
+
+	colon := strings.IndexByte(host, ':')
+	if colon <= 0 {
+		return false
+	}
+	for i, r := range host[:colon] {
+		if i == 0 {
+			if !isASCIILetter(r) {
+				return false
+			}
+			continue
+		}
+		if !isASCIILetter(r) && !isASCIIDigit(r) && r != '+' && r != '-' && r != '.' {
+			return false
+		}
+	}
+	return true
+}
+
+func isASCIILetter(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+}
+
+func isASCIIDigit(r rune) bool {
+	return r >= '0' && r <= '9'
 }
 
 func parseTunnelProbeTargetFromRequest(req map[string]interface{}) (tunnelProbeTarget, bool, error) {

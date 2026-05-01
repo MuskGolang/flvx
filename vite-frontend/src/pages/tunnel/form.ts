@@ -68,9 +68,11 @@ export const validateTunnelForm = (
   }
 
   const probeHost = (form.probeTargetHost || "").trim();
-  const probePort = Number(form.probeTargetPort || 0);
+  const probePortInput = form.probeTargetPort;
+  const probePort = Number(probePortInput ?? 0);
+  const hasProbePort = probePortInput != null && probePortInput !== 0;
 
-  if (probeHost || probePort > 0) {
+  if (probeHost || hasProbePort) {
     if (!probeHost) {
       errors.probeTargetHost = "请输入测试目标 Host";
     } else if (probeHost.includes("://") || /[\s/?#]/.test(probeHost)) {

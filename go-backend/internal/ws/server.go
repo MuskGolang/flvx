@@ -642,6 +642,9 @@ func (s *Server) validateAdminSession(userID int64, claims auth.Claims) bool {
 	if s == nil {
 		return false
 	}
+	if claims.Exp <= time.Now().Unix() {
+		return false
+	}
 	if s.getUserAuthState == nil {
 		return true
 	}

@@ -86,3 +86,25 @@ func TestValidateAdminSessionRejectsAuthStateChanges(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateAdminSessionRejectsExpiredToken(t *testing.T) {
+	secret := "unit-test-secret"
+	token, err := auth.GenerateToken(1, "admin_user", 0, secret)
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
+	}
+	claims, err := auth.ParseClaims(token, secret)
+	if err != nil {
+		t.Fatalf("parse claims: %v", err)
+	}
+	claims.Exp = 1
+
+	server := NewServer(nil, secret)
+	server.SetUserAuthStateLookup(func(userID int64) (*auth.UserAuthState, error) {
+		return &auth.UserAuthState{ID: userID, RoleID: 0, Status: 1, PasswordChangedAt: 0}, nil
+	})
+
+	if ok := server.validateAdminSession(1, claims); ok {
+		t.Fatal("expected expired token to be rejected")
+	}
+}

@@ -307,7 +307,17 @@ export const updateSiteConfig = async (configMap?: Record<string, string>) => {
   const resolvedConfigMap = configMap ?? (await getCachedConfigs());
 
   Object.entries(resolvedConfigMap).forEach(([key, value]) => {
-    configCache.set(key, String(value));
+    const normalizedKey = key.trim().toLowerCase();
+
+    if (SENSITIVE_CONFIG_KEYS.has(normalizedKey)) {
+      configCache.remove(normalizedKey);
+
+      return;
+    }
+
+    if (shouldPersistConfigKey(normalizedKey)) {
+      configCache.set(normalizedKey, String(value));
+    }
   });
 
   const hasAppName = Object.prototype.hasOwnProperty.call(

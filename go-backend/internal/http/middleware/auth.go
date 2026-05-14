@@ -34,12 +34,20 @@ func JWT(opts AuthOptions) func(http.Handler) http.Handler {
 
 			token := strings.TrimSpace(r.Header.Get("Authorization"))
 			if token == "" {
+				if allowsOptionalAuth(r.URL.Path) {
+					next.ServeHTTP(w, r)
+					return
+				}
 				response.WriteJSON(w, response.Err(401, "未登录或token已过期"))
 				return
 			}
 
 			claims, ok := auth.ValidateToken(token, opts.JWTSecret)
 			if !ok {
+				if allowsOptionalAuth(r.URL.Path) {
+					next.ServeHTTP(w, r)
+					return
+				}
 				response.WriteJSON(w, response.Err(401, "无效的token或token已过期"))
 				return
 			}
@@ -47,11 +55,19 @@ func JWT(opts AuthOptions) func(http.Handler) http.Handler {
 			if opts.GetUserAuthState != nil {
 				userID, err := strconv.ParseInt(claims.Sub, 10, 64)
 				if err != nil {
+					if allowsOptionalAuth(r.URL.Path) {
+						next.ServeHTTP(w, r)
+						return
+					}
 					response.WriteJSON(w, response.Err(401, "无效的token或token已过期"))
 					return
 				}
 				state, err := opts.GetUserAuthState(userID)
 				if err != nil || state == nil || state.Status != 1 || state.RoleID != claims.RoleID || claims.IatMs <= state.PasswordChangedAt {
+					if allowsOptionalAuth(r.URL.Path) {
+						next.ServeHTTP(w, r)
+						return
+					}
 					response.WriteJSON(w, response.Err(401, "无效的token或token已过期"))
 					return
 				}
@@ -82,6 +98,10 @@ func RequireAdmin(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func allowsOptionalAuth(path string) bool {
+	return path == "/api/v1/config/get"
 }
 
 func shouldSkip(path string) bool {

@@ -399,7 +399,12 @@ func (h *Handler) getConfigByName(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg, err := h.repo.GetConfigByName(req.Name)
+	if _, ok := r.Context().Value(middleware.ClaimsContextKey).(auth.Claims); !ok && !repo.IsPublicConfigKey(configName) {
+		response.WriteJSON(w, response.Err(401, "未登录或token已过期"))
+		return
+	}
+
+	cfg, err := h.repo.GetConfigByName(configName)
 	if err != nil {
 		response.WriteJSON(w, response.Err(-2, err.Error()))
 		return

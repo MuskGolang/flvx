@@ -272,7 +272,7 @@ func TestSystemUpgradeFailsFastBeforeMutatingFiles(t *testing.T) {
 
 	fakeDockerDir := t.TempDir()
 	fakeDockerPath := filepath.Join(fakeDockerDir, "docker")
-	fakeDockerScript := "#!/bin/sh\ncase \"$1\" in\n  --version)\n    echo 'Docker version 27.0.0'\n    exit 0\n    ;;&\n  compose)\n    if [ \"$2\" = version ]; then\n      echo 'Docker Compose version v2.33.0'\n      exit 0\n    fi\n    exit 0\n    ;;&\n  inspect)\n    echo 'No such object: flux-panel-backend' >&2\n    exit 1\n    ;;&\n  *)\n    exit 0\n    ;;&\n esac\n"
+	fakeDockerScript := "#!/bin/sh\ncase \"$1\" in\n  --version)\n    echo 'Docker version 27.0.0'\n    exit 0\n    ;;\n  compose)\n    if [ \"$2\" = version ]; then\n      echo 'Docker Compose version v2.33.0'\n      exit 0\n    fi\n    exit 0\n    ;;\n  inspect)\n    echo 'No such object: flux-panel-backend' >&2\n    exit 1\n    ;;\n  *)\n    exit 0\n    ;;\n esac\n"
 	if err := os.WriteFile(fakeDockerPath, []byte(fakeDockerScript), 0o755); err != nil {
 		t.Fatalf("WriteFile() fake docker error = %v", err)
 	}
@@ -281,7 +281,7 @@ func TestSystemUpgradeFailsFastBeforeMutatingFiles(t *testing.T) {
 	t.Setenv(panelBackendContainerEnv, "flux-panel-backend")
 
 	h := &Handler{}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/system/upgrade", strings.NewReader(`{"channel":"stable"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/system/upgrade", strings.NewReader(`{"channel":"stable","version":"3.0.0"}`))
 	rr := httptest.NewRecorder()
 
 	h.systemUpgrade(rr, req)

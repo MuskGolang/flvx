@@ -162,11 +162,17 @@ func TestPublicConfigGetAndAuthConfigContract(t *testing.T) {
 	router.ServeHTTP(secretResp, secretReq)
 	assertCodeMsg(t, secretResp, 403, "禁止访问敏感配置")
 
-	configReq := httptest.NewRequest(http.MethodPost, "/api/v1/config/get", bytes.NewBufferString(`{"name":"app_name"}`))
+	configReq := httptest.NewRequest(http.MethodPost, "/api/v1/config/get", bytes.NewBufferString(`{"name":"cloudflare_site_key"}`))
 	configReq.Header.Set("Content-Type", "application/json")
 	configResp := httptest.NewRecorder()
 	router.ServeHTTP(configResp, configReq)
-	assertCodeMsg(t, configResp, 401, "未登录或token已过期")
+	assertCode(t, configResp, 0)
+
+	configSecretReq := httptest.NewRequest(http.MethodPost, "/api/v1/config/get", bytes.NewBufferString(`{"name":"jwt_secret"}`))
+	configSecretReq.Header.Set("Content-Type", "application/json")
+	configSecretResp := httptest.NewRecorder()
+	router.ServeHTTP(configSecretResp, configSecretReq)
+	assertCodeMsg(t, configSecretResp, 403, "禁止访问敏感配置")
 }
 
 func TestOpenAPISubStoreContracts(t *testing.T) {

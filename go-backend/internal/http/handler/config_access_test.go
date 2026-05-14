@@ -42,16 +42,29 @@ func TestPublicConfigGetRejectsSensitiveKeys(t *testing.T) {
 	assertHandlerCodeMsg(t, resp, 403, "禁止访问敏感配置")
 }
 
-func TestConfigGetNowRequiresAuth(t *testing.T) {
-	router, _ := setupConfigAccessTestRouter(t)
+func TestConfigGetAllowsPublicCloudflareSiteKeyWithoutAuthForCachedLoginPage(t *testing.T) {
+	router, r := setupConfigAccessTestRouter(t)
+	seedConfigValue(t, r, "cloudflare_site_key", "site-key")
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/config/get", bytes.NewBufferString(`{"name":"app_name"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/config/get", bytes.NewBufferString(`{"name":"cloudflare_site_key"}`))
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
 
 	router.ServeHTTP(resp, req)
 
-	assertHandlerCodeMsg(t, resp, 401, "未登录或token已过期")
+	assertHandlerConfigValue(t, resp, "cloudflare_site_key", "site-key")
+}
+
+func TestConfigGetRejectsSensitiveKeysWithoutAuth(t *testing.T) {
+	router, _ := setupConfigAccessTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/config/get", bytes.NewBufferString(`{"name":"jwt_secret"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	assertHandlerCodeMsg(t, resp, 403, "禁止访问敏感配置")
 }
 
 func TestConfigUpdateRejectsSensitiveKeys(t *testing.T) {
@@ -137,5 +150,25 @@ func assertHandlerCodeMsg(t *testing.T, rec *httptest.ResponseRecorder, expected
 	}
 	if out.Code != expectedCode || out.Msg != expectedMsg {
 		t.Fatalf("expected (%d,%q), got (%d,%q)", expectedCode, expectedMsg, out.Code, out.Msg)
+	}
+}
+
+func assertHandlerConfigValue(t *testing.T, rec *httptest.ResponseRecorder, expectedName, expectedValue string) {
+	t.Helper()
+	var out struct {
+		Code int `json:"code"`
+		Data struct {
+			Name  string `json:"name"`
+			Value string `json:"value"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Code != 0 {
+		t.Fatalf("expected code 0, got %d", out.Code)
+	}
+	if out.Data.Name != expectedName || out.Data.Value != expectedValue {
+		t.Fatalf("expected config (%q,%q), got (%q,%q)", expectedName, expectedValue, out.Data.Name, out.Data.Value)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 
 	"go-backend/internal/auth"
@@ -148,4 +149,67 @@ func TestServeHTTPAllowsMonitorTokenWithPermission(t *testing.T) {
 		t.Fatalf("dial websocket error = %v", err)
 	}
 	_ = conn.Close()
+}
+
+func TestConnWrapSerializesConcurrentWrites(t *testing.T) {
+	serverConn, clientConn := websocketTestPipe(t)
+	defer serverConn.Close()
+	defer clientConn.Close()
+
+	cw := &connWrap{conn: serverConn}
+	readerDone := make(chan struct{})
+	go func() {
+		defer close(readerDone)
+		for i := 0; i < 64; i++ {
+			if _, _, err := clientConn.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}()
+
+	var wg sync.WaitGroup
+	for i := 0; i < 64; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := writeWSMessage(cw, websocket.TextMessage, []byte("x")); err != nil {
+				t.Errorf("writeWSMessage() error = %v", err)
+			}
+		}()
+	}
+
+	wg.Wait()
+	_ = clientConn.Close()
+	<-readerDone
+}
+
+func websocketTestPipe(t *testing.T) (*websocket.Conn, *websocket.Conn) {
+	t.Helper()
+
+	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+	serverConnCh := make(chan *websocket.Conn, 1)
+	serverErrCh := make(chan error, 1)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			serverErrCh <- err
+			return
+		}
+		serverConnCh <- conn
+	}))
+	t.Cleanup(ts.Close)
+
+	clientConn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(ts.URL, "http"), nil)
+	if err != nil {
+		t.Fatalf("dial websocket: %v", err)
+	}
+
+	select {
+	case err := <-serverErrCh:
+		t.Fatalf("upgrade websocket: %v", err)
+	case serverConn := <-serverConnCh:
+		return serverConn, clientConn
+	}
+
+	return nil, nil
 }
